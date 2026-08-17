@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>🎲 Dự đoán 3 xúc xắc</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0d12;color:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:720px;margin:auto;padding:18px 14px 40px}.card{background:#171b24;border:1px solid #2a3040;border-radius:20px;padding:18px;margin-bottom:14px}
+h1{font-size:25px;margin:0 0 5px}.sub{color:#9da5b5;font-size:14px;margin-bottom:14px}
+textarea{width:100%;height:120px;border:1px solid #353d4f;border-radius:14px;background:#0d1016;color:white;padding:14px;font-size:18px;outline:none}
+button{width:100%;border:0;border-radius:14px;padding:15px;margin-top:10px;background:#fff;color:#111;font-size:17px;font-weight:800}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{background:#0d1016;border-radius:15px;text-align:center;padding:14px}.label{color:#9da5b5;font-size:13px}.value{font-size:32px;font-weight:900;margin-top:4px}
+.bar{height:12px;background:#292e38;border-radius:99px;overflow:hidden;margin:7px 0 13px}.fill{height:100%;background:#eee}
+.small{font-size:13px;color:#9da5b5;line-height:1.5}table{width:100%;border-collapse:collapse}td,th{padding:8px 5px;border-bottom:1px solid #292e38;text-align:left;font-size:14px}
+.hot{font-weight:900}.warn{color:#f4c84a;font-size:13px;line-height:1.5}
+</style>
+
+<style>
+#keyGate{position:fixed;inset:0;background:#0b0d12;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.keyCard{width:min(520px,100%);background:#171b24;border:1px solid #2a3040;border-radius:22px;padding:22px}
+.keyCard h1{margin:0 0 7px;font-size:26px}.keyCard p{color:#9da5b5;font-size:14px;line-height:1.5}
+#keyInput{width:100%;padding:15px;border-radius:13px;border:1px solid #353d4f;background:#0d1016;color:#fff;font-size:17px;outline:none}
+#keyBtn{width:100%;padding:15px;margin-top:10px;border:0;border-radius:13px;background:#fff;color:#111;font-size:17px;font-weight:800}
+#keyMsg{min-height:20px;color:#ff6b6b;font-size:14px;margin-top:10px}
+#app{display:none}
+</style>
+</head>
+<body>
+<div id="keyGate"><div class="keyCard">
+<h1>🔐 Nhập Key</h1>
+<p>Nhập key hợp lệ để sử dụng công cụ dự đoán.</p>
+<input id="keyInput" type="text" placeholder="Nhập key..." autocomplete="off">
+<button id="keyBtn">Xác nhận Key</button>
+<div id="keyMsg"></div>
+</div></div>
+<div id="app">
+<main>
+<section class="card">
+<h1>🎲 Dự đoán 3 xúc xắc</h1>
+<div class="sub">Nhập tối đa 40 phiên gần nhất, từ 3 đến 18.</div>
+<textarea id="input" placeholder="9 10 11 12 15 9 10 7 9 3 8"></textarea>
+<button id="go">Phân tích & dự đoán</button>
+</section>
+
+<section class="card" id="result" hidden>
+<div class="grid">
+
+<div class="box"><div class="label">🎯 Cửa</div><div class="value" id="side">-</div></div>
+</div>
+<br>
+<div> Tài: <b id="p1">-</b></div><div class="bar"><div class="fill" id="bar1"></div></div>
+<div> Xỉu: <b id="p2">-</b></div><div class="bar"><div class="fill" id="bar2"></div></div>
+<div class="small" id="note"></div>
+</section>
+
+<section class="card" id="stats" hidden>
+<h3>🔮 Mô hình dự đoán</h3><div class="small" id="count"></div><br>
+<table><thead><tr><th>Chỉ số</th><th>Kết quả</th><th>Giá trị</th></tr></thead><tbody id="rows"></tbody></table>
+</section>
+
+<section class="card"><div class="warn">⚠️ Bảo Nam.</div></section>
+</main>
+
+<script>
+(function(){
+function parse(){
+  return document.getElementById('input').value.trim().split(/[\s,;|]+/)
+    .map(Number).filter(x=>Number.isInteger(x)&&x>=3&&x<=18).slice(-40);
+}
+function tx(x){ return x>=11 ? 1 : 0; }
+
+function predict(a){
+  const y=a.map(tx), n=y.length;
+
+  // Không dùng "kết quả cuối = Xỉu => tiếp tục Xỉu".
+  // Mô hình chỉ dùng thống kê quá khứ và luôn kéo xác suất về 50%
+  // khi dữ liệu không đủ mạnh.
+  const t=y.reduce((z,v)=>z+v,0);
+
+  // Tỷ lệ nền có làm trơn (Laplace), tránh 40 phiên lệch nhẹ
+  // nhưng lại tạo ra xác suất cực đoan.
+  const baseT=(t+2)/(n+4);
+
+  // Tìm các mẫu 2 và 3 trạng thái giống đoạn cuối.
+  // Chỉ dùng mẫu nếu có đủ số lần xuất hiện trong lịch sử.
+  let patternVals=[];
+  for(const k of [2,3]){
+    if(n<=k) continue;
+    const pat=y.slice(n-k).join('');
+    let matches=0, nextT=0;
+
+    for(let i=k;i<n;i++){
+      if(y.slice(i-k,i).join('')===pat){
+        matches++;
+        nextT+=y[i];
+      }
+    }
+
+    if(matches>=3){
+      // Làm trơn mạnh để tránh 1 mẫu nhỏ tạo 70-90%.
+      const p=(nextT+2)/(matches+4);
+      patternVals.push({p,matches});
+    }
+  }
+
+  let raw=baseT;
+  if(patternVals.length){
+    let sw=0, sp=0;
+    for(const q of patternVals){
+      const w=Math.min(q.matches,8);
+      sw+=w; sp+=q.p*w;
+    }
+    const patternP=sp/sw;
+    // Pattern chỉ điều chỉnh một phần, không áp đảo tỷ lệ nền.
+    raw=0.65*baseT+0.35*patternP;
+  }
+
+  // Shrink về 50% để không tạo "tín hiệu chắc chắn" giả.
+  const pT=0.5+(raw-0.5)*0.65;
+  return {pT,pX:1-pT,last:y[n-1]};
+}
+function backtest(a){
+  if(a.length<8) return null;
+  let correct=0,total=0;
+  for(let i=5;i<a.length;i++){
+    const hist=a.slice(0,i);
+    const p=predict(hist).pT;
+    const pred=p>=0.5?1:0;
+    if(pred===tx(a[i])) correct++;
+    total++;
+  }
+  return {correct,total,rate:100*correct/total};
+}
+
+function run(){
+  const a=parse();
+  if(a.length<5){alert('Nhập ít nhất 5 kết quả từ 3 đến 18.');return;}
+
+  const m=predict(a), pT=100*m.pT, pX=100*m.pX;
+  const side=m.pT>=0.5?'TÀI':'XỈU';
+  const confidence=Math.max(pT,pX);
+  const bt=backtest(a);
+
+  document.getElementById('result').hidden=false;
+  document.getElementById('stats').hidden=false;
+  document.getElementById('side').textContent=side;
+  document.getElementById('p1').textContent=pT.toFixed(1)+'%';
+  document.getElementById('p2').textContent=pX.toFixed(1)+'%';
+  document.getElementById('bar1').style.width=pT+'%';
+  document.getElementById('bar2').style.width=pX+'%';
+
+  let note='Đây là xác suất mô hình cho PHIÊN TIẾP THEO, không phải tỷ lệ xuất hiện trong dữ liệu.';
+  if(confidence<55) note+=' Tín hiệu yếu.';
+  else if(confidence<65) note+=' Tín hiệu trung bình.';
+  else note+=' Tín hiệu tương đối mạnh.';
+  if(bt) note+=' Backtest: '+bt.correct+'/'+bt.total+' đúng ('+bt.rate.toFixed(1)+'%).';
+  document.getElementById('note').textContent=note;
+
+  const tCount=a.filter(x=>x>=11).length;
+  const xCount=a.filter(x=>x<=10).length;
+  document.getElementById('count').textContent=
+    'Đã dùng '+a.length+' phiên gần nhất | Lịch sử: Tài '+tCount+' — Xỉu '+xCount+
+    ' | Phiên cuối: '+(m.last?'Tài':'Xỉu');
+
+  const rows=document.getElementById('rows');
+  rows.innerHTML='';
+  [
+    ['Dự đoán phiên tiếp theo',side,confidence.toFixed(1)+'%'],
+    ['Xác suất Tài','',pT.toFixed(1)+'%'],
+    ['Xác suất Xỉu','',pX.toFixed(1)+'%']
+  ].forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td>';
+    rows.appendChild(tr);
+  });
+}
+document.getElementById('go').addEventListener('click',run);
+})();
+</script>
+
+</div>
+<script>
+const VALID_KEYS=["TX-P8RA-CC3V-R2AA", "TX-TF79-RHFR-TMSN", "TX-RP8K-SA9E-FKBG", "TX-EJGM-F9EB-B2G3", "TX-KL3G-75YR-BYC7", "TX-NJJ2-WWA2-JXC4", "TX-KZT6-ZYJ8-8XKB", "TX-YKJB-U3S3-FJR4", "TX-74KE-RA8T-MVHJ", "TX-CW6N-F3ZZ-J323"];
+const STORAGE_KEY="tx_predictor_key_ok";
+const gate=document.getElementById("keyGate"),app=document.getElementById("app");
+const input=document.getElementById("keyInput"),msg=document.getElementById("keyMsg");
+function unlock(){
+ const v=input.value.trim();
+ if(VALID_KEYS.includes(v)){
+   localStorage.setItem(STORAGE_KEY,"1");
+   gate.style.display="none"; app.style.display="block";
+ }else msg.textContent="❌ Key không hợp lệ.";
+}
+document.getElementById("keyBtn").addEventListener("click",unlock);
+input.addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});
+if(localStorage.getItem(STORAGE_KEY)==="1"){gate.style.display="none";app.style.display="block";}
+</script>
+</body>
+</html>
